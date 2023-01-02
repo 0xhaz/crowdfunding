@@ -1,0 +1,25 @@
+{
+  "name": "decentralized-crowdfunding",
+  "version": "1.0.0",
+  "description": "Decentralized Crowdfunding",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xhaz/crowdfunding.git"
+  },
+  "keywords": [
+    "hardhat",
+    "typescript",
+    "nextjs",
+    "hardhat-deploy"
+  ],
+  "author": "0xhaz",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/0xhaz/crowdfunding/issues"
+  },
+  "homepage": "https://github.com/0xhaz/crowdfunding#readme"
+}
