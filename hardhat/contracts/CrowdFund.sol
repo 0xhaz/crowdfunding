@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
+import "../library/PriceConverter.sol";
 import "hardhat/console.sol";
 
 error CrowdFund__Deadline();
 error CrowdFund__NotOwner();
 error CrowdFund__Claimed();
 error CrowdFund__Ended();
+error CrowdFund__Withdraw();
 
 contract CrowdFund {
-    address public immutable i_feeAccount;
-    uint256 public immutable i_feePercent;
+    using PriceConverter for uint256;
+
+    address private immutable i_feeAccount;
+    uint256 private immutable i_feePercent;
+    address private immutable i_owner;
+
+    AggregatorV3Interface private s_priceFeed;
 
     event CreatedCampaign(
         uint256 id,
@@ -35,11 +42,17 @@ contract CrowdFund {
         bool claimed;
     }
 
-    mapping(uint256 => Campaign) public campaigns;
+    mapping(uint256 => Campaign) public s_campaigns;
 
-    constructor(address _feeAccount, uint256 _feePercent) {
+    constructor(
+        address _feeAccount,
+        uint256 _feePercent,
+        address priceFeedAddress
+    ) {
         i_feeAccount = _feeAccount;
         i_feePercent = _feePercent;
+        i_owner = msg.sender;
+        s_priceFeed = AggregatorV3Interface(priceFeedAddress);
     }
 
     uint256 public numberOfCampaigns = 0;
@@ -52,7 +65,7 @@ contract CrowdFund {
         uint256 _deadline,
         string memory _image
     ) external returns (uint256) {
-        Campaign storage campaign = campaigns[numberOfCampaigns];
+        Campaign storage campaign = s_campaigns[numberOfCampaigns];
         if (
             campaign.deadline < block.timestamp &&
             campaign.deadline > block.timestamp + 90 days
@@ -73,13 +86,15 @@ contract CrowdFund {
         return numberOfCampaigns - 1;
     }
 
-    function cancelCampaign(uint256 _id, address _owner) external {
-        Campaign memory campaign = campaigns[_id];
-        if (_owner != msg.sender) revert CrowdFund__NotOwner();
+    function cancelCampaign(
+        uint256 _id,
+        address _owner
+    ) external onlyOwner(_owner) {
+        Campaign memory campaign = s_campaigns[_id];
         if (campaign.deadline > block.timestamp + 90 days)
             revert CrowdFund__Ended();
 
-        delete campaigns[_id];
+        delete s_campaigns[_id];
 
         emit CancelCampaign(_id);
     }
@@ -89,7 +104,7 @@ contract CrowdFund {
         uint256 _feeAmount = (amount * i_feePercent) / 100;
         uint256 totalAmount = amount - _feeAmount;
 
-        Campaign storage campaign = campaigns[_id];
+        Campaign storage campaign = s_campaigns[_id];
 
         campaign.donators.push(msg.sender);
         campaign.donations.push(amount);
@@ -100,10 +115,12 @@ contract CrowdFund {
         }
     }
 
-    function withdraw(uint256 _id, address _owner) external payable {
-        Campaign storage campaign = campaigns[_id];
+    function withdraw(
+        uint256 _id,
+        address _owner
+    ) external payable onlyOwner(_owner) {
+        Campaign storage campaign = s_campaigns[_id];
 
-        if (_owner != msg.sender) revert CrowdFund__NotOwner();
         if (block.timestamp < campaign.deadline) revert CrowdFund__Deadline();
         if (campaign.claimed == true) revert CrowdFund__Claimed();
         uint amount = address(this).balance;
@@ -111,7 +128,7 @@ contract CrowdFund {
         campaign.claimed = true;
 
         (bool success, ) = _owner.call{value: amount}("");
-        require(success, "Failed to send Eth");
+        if (!success) revert CrowdFund__Withdraw();
 
         emit Claim(_id);
     }
@@ -119,17 +136,22 @@ contract CrowdFund {
     function getDonators(
         uint256 _id
     ) public view returns (address[] memory, uint256[] memory) {
-        return (campaigns[_id].donators, campaigns[_id].donations);
+        return (s_campaigns[_id].donators, s_campaigns[_id].donations);
     }
 
     function getCampaigns() external view returns (Campaign[] memory) {
         Campaign[] memory allCampaigns = new Campaign[](numberOfCampaigns);
 
         for (uint i = 0; i < numberOfCampaigns; i++) {
-            Campaign storage item = campaigns[i];
+            Campaign storage item = s_campaigns[i];
 
             allCampaigns[i] = item;
         }
         return allCampaigns;
+    }
+
+    modifier onlyOwner(address _owner) {
+        if (_owner != msg.sender) revert CrowdFund__NotOwner();
+        _;
     }
 }
