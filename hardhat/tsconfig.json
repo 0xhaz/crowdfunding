@@ -9,7 +9,7 @@
     "resolveJsonModule": true,
     "incremental": true,
     "moduleResolution": "node",
-    "isolatedModules": true,
+    "isolatedModules": false,
     "jsx": "preserve",
     "allowJs": true,
     "noEmit": true

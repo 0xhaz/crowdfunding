@@ -36,6 +36,10 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: true,
     },
   },
+  typechain: {
+    outDir: "typechain",
+    target: "ethers-v5",
+  },
   solidity: {
     compilers: [
       {

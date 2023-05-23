@@ -9,7 +9,7 @@ import {
   networkConfig,
   feePercent,
 } from "../helper-hardhat-config";
-import { CrowdFund } from "../typechain-types";
+import { CrowdFund__factory, CrowdFund } from "../typechain";
 
 type Contract = CrowdFund;
 
@@ -20,14 +20,24 @@ const deployCrowdFund: DeployFunction = async function (
 ) {
   // @ts-ignore
   const { getNamedAccounts, deployments, network } = hre;
-  const { deploy, log } = deployments;
+  const { deploy, log, get } = deployments;
   const { deployer, feeAccount } = await getNamedAccounts();
-  const chainId = network.config.chainId;
+  const chainId: number | undefined = network.config.chainId;
+  let ethUsdPriceFeedAddress;
 
-  ("Deploying CrowdFund Contract...");
+  if (developmentChains.includes(network.name)) {
+    const ethUsdAggregator = await get("MockV3Aggregator");
+    ethUsdPriceFeedAddress = ethUsdAggregator.address;
+  } else {
+    ethUsdPriceFeedAddress = networkConfig[chainId]["ethUsdPriceFeed"];
+  }
+
+  const args = [feeAccount, feePercent, ethUsdPriceFeedAddress];
+
+  log("Deploying CrowdFund Contract...");
   const crowdFundContract = await deploy("CrowdFund", {
     from: deployer,
-    args: [feeAccount, feePercent],
+    args: args,
     log: true,
     waitConfirmations: networkConfig[network.name].blockConfirmation || 1,
   });
@@ -63,6 +73,27 @@ function saveFrontEndFiles(contract: Contract, contractName: string) {
     contractDir + "/contract-address.json",
     JSON.stringify({ [contractName]: contract.address }, undefined, 2)
   );
+
+  // const addNewLine = () => {
+  //   fs.open(contractDir, "a", (e, id) => {
+  //     fs.writeFileSync(
+  //       "/contract-address.json",
+  //       JSON.stringify({ [contractName]: contract.address }, undefined, 2)
+  //     );
+  //   });
+  // };
+
+  // const file = fs.readFileSync(contractDir + "/contract-address.json");
+  // const data = { contractName: contract.address };
+  // if (file.length === 0) {
+  //   fs.writeFileSync("contract-address.json", JSON.stringify([data]));
+  // } else {
+  //   const json = JSON.parse(file.toString());
+  //   json.push(data);
+  //   fs.writeFileSync("contract-address.json", JSON.stringify(data));
+  // }
+
+  // fs.writeFileSync(data, JSON.stringify(json));
 
   const Artifact = artifacts.readArtifactSync(contractName);
 
