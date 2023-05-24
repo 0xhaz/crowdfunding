@@ -126,7 +126,7 @@ contract CrowdFund {
         returns (uint256)
     {
         if (_target < 0 ether) revert CrowdFund__Required();
-        if (_deadline <= block.timestamp) revert CrowdFund__Deadline();
+
         Campaign storage campaign = s_campaigns[s_numberOfCampaigns];
 
         campaign.id = s_numberOfCampaigns;
@@ -140,6 +140,14 @@ contract CrowdFund {
         campaign.donators = new address[](0);
         campaign.donations = new uint256[](0);
         campaign.category = _category;
+
+        if (
+            _deadline <= block.timestamp && campaign.amountCollected < _target
+        ) {
+            campaign.status = CampaignStatus.REVERTED;
+        } else {
+            campaign.status = CampaignStatus.OPEN;
+        }
 
         s_campaignExist[campaign.id] = true;
 
@@ -219,7 +227,7 @@ contract CrowdFund {
             campaign.status == CampaignStatus.PAID
         ) revert CrowdFund__Ended();
 
-        if (block.timestamp > campaign.deadline) revert CrowdFund__Deadline();
+        if (block.timestamp >= campaign.deadline) revert CrowdFund__Deadline();
 
         campaign.status = CampaignStatus.REVERTED;
 
@@ -238,10 +246,19 @@ contract CrowdFund {
         if (campaign.owner != msg.sender) revert CrowdFund__NotOwner();
         if (campaign.status != CampaignStatus.REVERTED)
             revert CrowdFund__Required();
-        if (block.timestamp > campaign.deadline) revert CrowdFund__Deadline();
+        if (block.timestamp <= campaign.deadline) revert CrowdFund__Deadline();
 
         campaign.target = _newTarget;
         campaign.deadline = _newDeadline;
+
+        if (
+            campaign.amountCollected < _newTarget &&
+            _newDeadline <= block.timestamp
+        ) {
+            campaign.status = CampaignStatus.REVERTED;
+        } else {
+            campaign.status = CampaignStatus.OPEN;
+        }
 
         emit UpdatedCampaign(_id, _newTarget, _newDeadline);
     }
