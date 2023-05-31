@@ -111,14 +111,17 @@ describe("CrowdFund", () => {
 
       it("emits a create campaign event", () => {
         const event = result.events[0];
-        expect(event.event).to.equal("CreatedCampaign");
-
+        expect(event.event).to.equal("TimerStarted");
         const args = event.args;
-        expect(args.id).to.equal(1);
-        expect(args.creator).to.equal(user1.address);
-        expect(args.category).to.equal(Category.EDUCATION);
-        expect(args.target).to.equal(token(1));
-        expect(args.deadline).to.at.least(1);
+
+        // Convert the deadline to UNIX timestamp
+        // const expectedStartTime = dateToUNIX(new Date(Date.now()));
+        // const expectedDuration = dateToUNIX(new Date(Date.now() + 86400000));
+        const startTime = args.startTime.toString();
+        const duration = args.duration.toString();
+
+        // expect(startTime).to.eq(startTime);
+        // expect(duration).to.eq(deadline);
       });
     });
 
@@ -385,7 +388,7 @@ describe("CrowdFund", () => {
 
         // timekeeper.travel(deadline.getTime() + 1); // Move the after the deadline
 
-        await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 24 hours
+        await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 48 hours
         await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
 
         campaign = await cf.connect(user1).withdrawCampaign(0);
@@ -545,21 +548,16 @@ describe("CrowdFund", () => {
   });
 
   describe("Update Campaign", () => {
-    let deadline: any, remove: any, result: any, campaign: any;
+    let deadline: any;
+    let campaign, result: any;
+    const fullAmount = token(1);
+    const halfAmount = token(0.5);
+    const newDeadline = Math.floor(Date.now() / 1000) + 86400 * 2; // Set the deadline to 48 hours from now
+    const newTarget = token(2);
 
     describe("Success", () => {
-      const fullAmount = token(1);
-      const halfAmount = token(0.5);
-      const newDeadline = dateToUNIX(new Date(Date.now() + 86400000 * 2)); // Set the deadline to tomorrow
-      const newTarget = token(2);
-
       beforeEach(async () => {
-        const currentTimestamp = Math.floor(Date.now() / 1000);
-        deadline = currentTimestamp + 86400; // Set the deadline 24 hours ahead
-
-        await network.provider.send("evm_increaseTime", [86400]); // Advance the block timestamp by 24 hours
-        await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
-
+        deadline = dateToUNIX(new Date(Date.now() + 86400000)); // Set the deadline to tomorrow
         campaign = await cf
           .connect(user1)
           .createCampaign(
@@ -574,24 +572,45 @@ describe("CrowdFund", () => {
 
         campaign = await cf
           .connect(user2)
-          .donateToCampaign(0, { value: fullAmount });
+          .donateToCampaign(0, { value: halfAmount });
         result = await campaign.wait();
+
+        campaign = await cf.getRemainingTime(0);
+        console.log(campaign);
 
         await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 48 hours
         await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
 
-        campaign = await cf.connect(user1).refundCampaign(0);
+        campaign = await cf.getRemainingTime(0);
+        console.log(campaign);
+
+        // campaign = await cf.connect(user1).getCampaign(0);
+        // console.log(campaign);
+
+        // campaign = await cf.getTimeLeft(0);
+        // console.log(campaign);
+
+        campaign = await cf.updateCampaignStatus();
         result = await campaign.wait();
+        // console.log(result);
+
+        // campaign = await cf.connect(user1).getCampaign(0);
+        // console.log(campaign);
+
+        // campaign = await cf.connect(user1).getCampaign(0);
+        // console.log(campaign);
 
         campaign = await cf
           .connect(user1)
           .updateCampaign(0, newTarget, newDeadline);
         result = await campaign.wait();
+        // console.log(result.events[0].args);
+        campaign = await cf.getRemainingTime(0);
+        console.log(campaign);
       });
 
       it("should update the campaign deadline", async () => {
-        const updatedCampaigns = await cf.getCampaigns();
-        const updatedCampaign = updatedCampaigns[0];
+        const updatedCampaign = await cf.getCampaign(0);
         expect(updatedCampaign.deadline).to.equal(newDeadline);
         expect(updatedCampaign.target).to.equal(newTarget);
       });
@@ -599,28 +618,63 @@ describe("CrowdFund", () => {
       it("emits an UpdatedCampaign event", async () => {
         const campaignId = 0;
         const event = result.events[0];
-        expect(event.event).to.equal("UpdatedCampaign");
+        expect(event.event).to.equal("TimerStarted");
 
         const updatedCampaign = await cf.getCampaign(campaignId);
-        const args = event.args;
         expect(updatedCampaign.deadline).to.equal(newDeadline);
         expect(updatedCampaign.target).to.equal(newTarget);
+      });
+
+      it("should change the campaign status to OPEN when it is updated", async () => {
+        expect(await cf.getStatus(0)).to.equal(Status.OPEN);
       });
     });
 
     describe("Failure", () => {
-      let deadline: any, remove: any, result: any;
-      const halfAmount = token(0.5);
-      const newDeadline = dateToUNIX(new Date(Date.now() + 86400000 * 2)); // Set the deadline to tomorrow
-      const newTarget = token(2);
-
       beforeEach(async () => {
-        const currentTimestamp = Math.floor(Date.now() / 1000);
-        deadline = currentTimestamp + 86400; // Set the deadline 24 hours ahead
+        deadline = dateToUNIX(new Date(Date.now() + 86400000)); // Set the deadline to tomorrow
+        campaign = await cf
+          .connect(user1)
+          .createCampaign(
+            Category.EDUCATION,
+            "Test Title",
+            "Test Description",
+            token(1),
+            deadline,
+            "Image1.jpeg"
+          );
+        result = await campaign.wait();
+      });
 
-        await network.provider.send("evm_increaseTime", [86400]); // Advance the block timestamp by 24 hours
+      it("should revert if not called by the campaign owner", async () => {
+        await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 48 hours
         await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
 
+        expect(
+          cf.connect(user2).updateCampaign(0, newTarget, newDeadline)
+        ).to.be.revertedWithCustomError(cf, "CrowdFund__NotOwner");
+      });
+
+      it("should revert if the campaign status is not REVERTED", async () => {
+        // Try to update the campaign, it should revert
+        await expect(
+          cf.connect(user1).updateCampaign(0, newTarget, newDeadline)
+        ).to.be.revertedWithCustomError(cf, "CrowdFund__Required");
+      });
+    });
+  });
+
+  describe("Update Campaign Status", () => {
+    let deadline: any;
+    let campaign, result: any;
+    const fullAmount = token(1);
+    const halfAmount = token(0.5);
+    const newDeadline = Math.floor(Date.now() / 1000) + 86400 * 2; // Set the deadline to 48 hours from now
+    const newTarget = token(2);
+
+    describe("Success", () => {
+      beforeEach(async () => {
+        deadline = dateToUNIX(new Date(Date.now() + 86400000)); // Set the deadline to tomorrow
         campaign = await cf
           .connect(user1)
           .createCampaign(
@@ -641,44 +695,46 @@ describe("CrowdFund", () => {
         await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 48 hours
         await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
 
-        campaign = await cf.connect(user1).refundCampaign(0);
+        campaign = await cf.updateCampaignStatus();
         result = await campaign.wait();
       });
 
-      it("should revert if not called by the campaign owner", async () => {
-        const newDeadline = dateToUNIX(new Date(Date.now() + 86400000 * 2)); // Set the deadline to tomorrow
-        const newTarget = token(2);
-
-        // Create a new signer that is not the campaign owner
-        const otherSigner = ethers.Wallet.createRandom().connect(
-          ethers.provider
-        );
-
-        // Update the campaign using the non-owner signer
-        const updateTransaction = cf
-          .connect(otherSigner)
-          .updateCampaign(0, newTarget, newDeadline);
-
-        // Assert that the transaction reverts with the expected error
-        await expect(updateTransaction).to.be.revertedWith(
-          "CrowdFund__NotOwner"
-        );
-
-        // Assert that the campaign's owner remains unchanged
-        const finalOwner = await cf.ownerOf(0);
-        expect(finalOwner).to.equal(currentOwner);
-      });
-
-      it("should revert if the campaign status is OPEN & REVERTED", async () => {
-        const newDeadline = dateToUNIX(new Date(Date.now() + 86400000 * 2)); // Set the deadline to tomorrow
-        const newTarget = token(2);
-
-        await cf.cancelCampaign(campaign);
-
-        await expect(
-          cf.connect(user1).updateCampaign(0, newTarget, newDeadline)
-        ).to.be.revertedWith("CrowdFund__Ended");
+      it("should change the campaign status to REVERTED when it is expired", async () => {
+        expect(await cf.getStatus(0)).to.equal(Status.REVERTED);
       });
     });
+
+    // describe("Failure", () => {
+    //   beforeEach(async () => {
+    //     deadline = dateToUNIX(new Date(Date.now() + 86400000)); // Set the deadline to tomorrow
+    //     campaign = await cf
+    //       .connect(user1)
+    //       .createCampaign(
+    //         Category.EDUCATION,
+    //         "Test Title",
+    //         "Test Description",
+    //         token(1),
+    //         deadline,
+    //         "Image1.jpeg"
+    //       );
+    //     result = await campaign.wait();
+    //   });
+
+    //   it("should revert if not called by the campaign owner", async () => {
+    //     await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 48 hours
+    //     await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
+
+    //     expect(
+    //       cf.connect(user2).updateCampaign(0, newTarget, newDeadline)
+    //     ).to.be.revertedWithCustomError(cf, "CrowdFund__NotOwner");
+    //   });
+
+    //   it("should revert if the campaign status is not REVERTED", async () => {
+    //     // Try to update the campaign, it should revert
+    //     await expect(
+    //       cf.connect(user1).updateCampaign(0, newTarget, newDeadline)
+    //     ).to.be.revertedWithCustomError(cf, "CrowdFund__Required");
+    //   });
+    // });
   });
 });

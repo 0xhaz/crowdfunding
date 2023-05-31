@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
-import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "../library/PriceConverter.sol";
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 error CrowdFund__Deadline();
 error CrowdFund__NotOwner();
@@ -15,6 +14,9 @@ contract CrowdFund {
     address private immutable i_feeAccount;
     uint256 private i_feePercent;
     address private i_owner;
+    uint startTime;
+    uint duration;
+    CampaignStatus private campaignStatus;
 
     AggregatorV3Interface private s_priceFeed;
 
@@ -57,15 +59,14 @@ contract CrowdFund {
         _;
     }
 
-    modifier requiredCampaign(
-        string memory _title,
-        string memory _description,
-        string memory _image
-    ) {
-        if (bytes(_title).length < 0) revert CrowdFund__Required();
-        if (bytes(_description).length < 0) revert CrowdFund__Required();
-        if (bytes(_image).length < 0) revert CrowdFund__Required();
+    modifier onlyCampaignOwner(uint256 _id) {
+        Campaign storage campaign = s_campaigns[_id];
+        if (campaign.owner != msg.sender) revert CrowdFund__NotOwner();
+        _;
+    }
 
+    modifier onlyOpenCampaign() {
+        if (campaignStatus != CampaignStatus.OPEN) revert CrowdFund__Deadline();
         _;
     }
 
@@ -92,6 +93,8 @@ contract CrowdFund {
         uint256 donations,
         uint256 timestamp
     );
+
+    event TimerStarted(uint256 startTime, uint256 duration);
 
     event WithdrawCampaign(uint id, address indexed creator);
 
@@ -120,12 +123,9 @@ contract CrowdFund {
         uint256 _target,
         uint256 _deadline,
         string memory _image
-    )
-        external
-        requiredCampaign(_title, _description, _image)
-        returns (uint256)
-    {
+    ) external returns (uint256) {
         if (_target < 0 ether) revert CrowdFund__Required();
+        if (_deadline < block.timestamp) revert CrowdFund__Required();
 
         Campaign storage campaign = s_campaigns[s_numberOfCampaigns];
 
@@ -141,13 +141,9 @@ contract CrowdFund {
         campaign.donations = new uint256[](0);
         campaign.category = _category;
 
-        if (
-            _deadline <= block.timestamp && campaign.amountCollected < _target
-        ) {
-            campaign.status = CampaignStatus.REVERTED;
-        } else {
-            campaign.status = CampaignStatus.OPEN;
-        }
+        _startTimer(_deadline);
+
+        campaign.status = CampaignStatus.OPEN;
 
         s_campaignExist[campaign.id] = true;
 
@@ -164,16 +160,11 @@ contract CrowdFund {
         return s_numberOfCampaigns - 1;
     }
 
-    function donateToCampaign(uint256 _id) external payable {
+    function donateToCampaign(uint256 _id) external payable onlyOpenCampaign {
         Campaign storage campaign = s_campaigns[_id];
         uint amount = msg.value;
 
-        if (amount < 0 ether) revert CrowdFund__Required();
         if (!s_campaignExist[_id]) revert CrowdFund__Required();
-        if (
-            campaign.status != CampaignStatus.OPEN &&
-            campaign.status != CampaignStatus.APPROVED
-        ) revert CrowdFund__Ended();
 
         campaign.donators.push(msg.sender);
         campaign.donations.push(amount);
@@ -188,12 +179,12 @@ contract CrowdFund {
         }
     }
 
-    function cancelCampaign(uint256 _id) external {
+    function cancelCampaign(
+        uint256 _id
+    ) external onlyCampaignOwner(_id) onlyOpenCampaign {
         Campaign storage campaign = s_campaigns[_id];
 
         if (campaign.owner != msg.sender) revert CrowdFund__NotOwner();
-        if (campaign.status != CampaignStatus.OPEN)
-            revert CrowdFund__Required();
 
         campaign.status = CampaignStatus.DELETED;
 
@@ -204,11 +195,16 @@ contract CrowdFund {
         emit CancelCampaign(_id, msg.sender, block.timestamp);
     }
 
-    function withdrawCampaign(uint256 _id) external payable {
+    function withdrawCampaign(
+        uint256 _id
+    ) external payable onlyCampaignOwner(_id) {
         Campaign storage campaign = s_campaigns[_id];
 
-        if (campaign.status != CampaignStatus.APPROVED)
-            revert CrowdFund__Required();
+        if (
+            campaign.status != CampaignStatus.APPROVED &&
+            campaign.status != CampaignStatus.REVERTED
+        ) revert CrowdFund__Required();
+
         if (msg.sender != campaign.owner) revert CrowdFund__NotOwner();
 
         campaign.status = CampaignStatus.PAID;
@@ -218,7 +214,7 @@ contract CrowdFund {
         emit WithdrawCampaign(_id, msg.sender);
     }
 
-    function refundCampaign(uint _id) external {
+    function refundCampaign(uint _id) external onlyCampaignOwner(_id) {
         Campaign storage campaign = s_campaigns[_id];
 
         if (
@@ -240,31 +236,35 @@ contract CrowdFund {
         uint _id,
         uint _newTarget,
         uint _newDeadline
-    ) external {
+    ) external onlyCampaignOwner(_id) {
         Campaign storage campaign = s_campaigns[_id];
 
-        if (campaign.owner != msg.sender) revert CrowdFund__NotOwner();
         if (campaign.status != CampaignStatus.REVERTED)
             revert CrowdFund__Required();
-        if (block.timestamp <= campaign.deadline) revert CrowdFund__Deadline();
 
         campaign.target = _newTarget;
         campaign.deadline = _newDeadline;
+        campaign.status = CampaignStatus.OPEN;
 
-        if (
-            campaign.amountCollected < _newTarget &&
-            _newDeadline <= block.timestamp
-        ) {
-            campaign.status = CampaignStatus.REVERTED;
-        } else {
-            campaign.status = CampaignStatus.OPEN;
-        }
+        _startTimer(_newDeadline);
 
         emit UpdatedCampaign(_id, _newTarget, _newDeadline);
     }
 
+    function updateCampaignStatus() external onlyOwner {
+        for (uint i = 0; i < s_numberOfCampaigns; i++) {
+            if (_checkTimerExpired(i)) {
+                setCampaignStatus(i, CampaignStatus.REVERTED);
+            }
+        }
+    }
+
     function setFee(uint _fee) external onlyOwner {
         i_feePercent = _fee;
+    }
+
+    function withdrawFromContract() external onlyOwner {
+        payable(i_owner).transfer(address(this).balance);
     }
 
     function getDonators(
@@ -282,6 +282,10 @@ contract CrowdFund {
             allCampaigns[i] = item;
         }
         return allCampaigns;
+    }
+
+    function getCampaign(uint _id) external view returns (Campaign memory) {
+        return s_campaigns[_id];
     }
 
     function getFeeAccount() external view returns (address) {
@@ -316,6 +320,41 @@ contract CrowdFund {
         return campaign.refunded;
     }
 
+    function getRemainingTime(uint256 _id) external view returns (uint) {
+        require(startTime > 0, "Start time not started yet");
+
+        Campaign storage campaign = s_campaigns[_id];
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+
+        uint remainingTime = 0;
+
+        if (block.timestamp < campaign.deadline) {
+            remainingTime = campaign.deadline - block.timestamp;
+        } else {
+            remainingTime = 0;
+        }
+        return remainingTime;
+    }
+
+    // for contract owner only to set the campaign status
+    function setCampaignStatus(
+        uint256 _id,
+        CampaignStatus _status
+    ) internal onlyOwner {
+        Campaign storage campaign = s_campaigns[_id];
+
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+
+        campaign.status = _status;
+    }
+
+    function _checkTimerExpired(uint256 _id) internal view returns (bool) {
+        Campaign storage _campaign = s_campaigns[_id];
+        bool isExpired = _campaign.deadline <= block.timestamp;
+
+        return isExpired;
+    }
+
     function _refund(uint _id) internal {
         Campaign storage campaign = s_campaigns[_id];
 
@@ -324,14 +363,9 @@ contract CrowdFund {
             campaign.status != CampaignStatus.REVERTED
         ) revert CrowdFund__Required();
 
-        address[] memory donator = new address[](campaign.donators.length);
-        uint[] memory donation = new uint[](campaign.donations.length);
-
-        for (uint i = 0; i < campaign.donators.length; i++) {
-            donator[i] = campaign.donators[i];
-            donation[i] = campaign.donations[i];
-
-            _payTo(donator[i], donation[i]);
+        // Calculate total amount to refund
+        for (uint i = 0; i < campaign.donations.length; i++) {
+            _payTo(campaign.donators[i], campaign.donations[i]);
         }
 
         campaign.refunded = true;
@@ -356,5 +390,14 @@ contract CrowdFund {
         _payTo(i_feeAccount, fee);
 
         emit PaidOutCampaign(_id, msg.sender, netAmount, block.timestamp);
+    }
+
+    function _startTimer(uint256 _deadline) internal {
+        require(_deadline > 0, "Deadline must be greater than zero");
+
+        startTime = block.timestamp;
+        duration = _deadline * 1 days;
+
+        emit TimerStarted(startTime, duration);
     }
 }

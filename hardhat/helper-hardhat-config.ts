@@ -1,6 +1,7 @@
 export interface networkConfigItem {
+  name?: string;
   ethUsdPriceFeed?: string;
-  blockConfirmation?: number;
+  blockConfirmations?: number;
 }
 
 export interface networkConfigInfo {
@@ -16,8 +17,9 @@ export const INITIAL_ANSWER = 200000000000;
 export const networkConfig: networkConfigInfo = {
   localhost: {},
   hardhat: {},
-  goerli: {
+  5: {
+    name: "goerli",
     ethUsdPriceFeed: "0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e",
-    blockConfirmation: 6,
+    blockConfirmations: 6,
   },
 };

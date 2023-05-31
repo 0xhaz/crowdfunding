@@ -31,9 +31,17 @@ const config: HardhatUserConfig = {
     },
     goerli: {
       url: GOERLI_URL,
-      accounts: [`${PRIVATE_KEY}`],
+      accounts: [PRIVATE_KEY],
       chainId: 5,
       allowUnlimitedContractSize: true,
+      namedAccounts: {
+        deployer: {
+          default: 0,
+        },
+        feeAccount: {
+          default: 1,
+        },
+      },
     },
   },
   typechain: {
@@ -73,7 +81,7 @@ const config: HardhatUserConfig = {
       default: 0,
     },
     feeAccount: {
-      default: 1,
+      default: "deployer",
     },
     user1: {
       default: 2,

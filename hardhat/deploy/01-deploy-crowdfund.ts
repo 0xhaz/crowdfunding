@@ -24,12 +24,24 @@ const deployCrowdFund: DeployFunction = async function (
   const { deployer, feeAccount } = await getNamedAccounts();
   const chainId: number | undefined = network.config.chainId;
   let ethUsdPriceFeedAddress;
+  let blockConfirmations;
 
   if (developmentChains.includes(network.name)) {
     const ethUsdAggregator = await get("MockV3Aggregator");
     ethUsdPriceFeedAddress = ethUsdAggregator.address;
+    blockConfirmations = 0;
   } else {
-    ethUsdPriceFeedAddress = networkConfig[chainId]["ethUsdPriceFeed"];
+    const networkInfo = networkConfig[chainId];
+    if (!networkInfo) {
+      throw new Error(`Network configuration not found for chainId ${chainId}`);
+    }
+    ethUsdPriceFeedAddress = networkInfo.ethUsdPriceFeed;
+    blockConfirmations = networkInfo.blockConfirmations;
+    if (blockConfirmations === undefined) {
+      throw new Error(
+        `Block confirmations not specified for chainId ${chainId}`
+      );
+    }
   }
 
   const args = [feeAccount, feePercent, ethUsdPriceFeedAddress];
@@ -39,7 +51,7 @@ const deployCrowdFund: DeployFunction = async function (
     from: deployer,
     args: args,
     log: true,
-    waitConfirmations: networkConfig[network.name].blockConfirmation || 1,
+    waitConfirmations: blockConfirmations || 1,
   });
 
   saveFrontEndFiles(crowdFundContract, contractName);
@@ -51,7 +63,7 @@ const deployCrowdFund: DeployFunction = async function (
     !developmentChains.includes(network.name) &&
     process.env.ETHERSCAN_API_KEY
   ) {
-    await verify(crowdFundContract.address, []);
+    await verify(crowdFundContract.address, args);
   }
 };
 
