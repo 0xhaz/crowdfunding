@@ -540,7 +540,7 @@ describe("CrowdFund", () => {
 
     describe("Success", () => {
       beforeEach(async () => {
-        deadline = dateToUNIX(new Date(Date.now())) + sevenDays; // Set the deadline to tomorrow
+        deadline = dateToUNIX(new Date(Date.now())) + sevenDays; // Set the deadline to 7 days
         campaign = await cf
           .connect(user1)
           .createCampaign(

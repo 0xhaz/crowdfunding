@@ -343,7 +343,7 @@ contract CrowdFund is KeeperCompatibleInterface {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        upkeepNeeded = isUpdateCampaignStatusNeeded();
+        upkeepNeeded = _isUpdateCampaignStatusNeeded();
         performData = "";
     }
 
@@ -351,7 +351,7 @@ contract CrowdFund is KeeperCompatibleInterface {
         _updateCampaignStatus();
     }
 
-    function isUpdateCampaignStatusNeeded() internal view returns (bool) {
+    function _isUpdateCampaignStatusNeeded() internal view returns (bool) {
         Campaign storage campaign = s_campaigns[s_numberOfCampaigns];
         if (block.timestamp >= campaign.deadline) {
             return true;
