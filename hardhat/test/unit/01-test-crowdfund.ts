@@ -8,7 +8,6 @@ import {
 } from "../../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { DECIMALS, INITIAL_ANSWER } from "../../helper-hardhat-config";
-import { formatBytes32String } from "ethers/lib/utils";
 
 const token = (n: number) => {
   return ethers.utils.parseEther(n.toString());
@@ -114,13 +113,11 @@ describe("CrowdFund", () => {
         const event = result.events[0];
         expect(event.event).to.equal("CreatedCampaign");
         const args = event.args;
-
-        // Convert the deadline to UNIX timestamp
-        // const expectedStartTime = dateToUNIX(new Date(Date.now()));
-        // const expectedDuration = dateToUNIX(new Date(Date.now() + 86400000));
-
-        // expect(startTime).to.eq(startTime);
-        // expect(duration).to.eq(deadline);
+        expect(args.id.toNumber()).to.equal(1);
+        expect(args.creator).to.equal(user1.address);
+        expect(args.category).to.equal(Category.EDUCATION);
+        expect(args.target).to.equal(token(1));
+        expect(args.deadline).to.equal(deadline);
       });
     });
 
@@ -185,13 +182,6 @@ describe("CrowdFund", () => {
       it("status should remain OPEN until target is met", async () => {
         expect(await cf.getStatus(0)).to.equal(Status.OPEN);
       });
-
-      // it("should add the donator and the amount of donation", async () => {
-      //   expect(await cf.getDonators(0)).to.equal([
-      //     [user2.address],
-      //     [{ uint256: token(0.5) }],
-      //   ]);
-      // });
 
       it("should change the status to APPROVED if target is met", async () => {
         await cf.connect(user2).donateToCampaign(0, { value: fullAmount });
@@ -380,8 +370,6 @@ describe("CrowdFund", () => {
           .connect(user2)
           .donateToCampaign(0, { value: fullAmount });
         result = await campaign.wait();
-
-        // timekeeper.travel(deadline.getTime() + 1); // Move the after the deadline
 
         await network.provider.send("evm_increaseTime", [86400 * 2]); // Advance the block timestamp by 48 hours
         await network.provider.send("evm_mine"); // Mine a new block with the updated timestamp
@@ -650,7 +638,7 @@ describe("CrowdFund", () => {
     });
   });
 
-  describe("Update Campaign Status", () => {
+  describe("Update Campaign Status with Chainlink Keepers", () => {
     let deadline: any;
     let campaign, result: any;
     const fullAmount = token(1);

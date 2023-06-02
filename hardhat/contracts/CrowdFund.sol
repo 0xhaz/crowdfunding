@@ -95,8 +95,6 @@ contract CrowdFund is KeeperCompatibleInterface {
         uint256 timestamp
     );
 
-    event TimerStarted(uint256 startTime, uint256 duration);
-
     event WithdrawCampaign(uint id, address indexed creator);
 
     event RefundCampaign(uint id, address indexed creator);
@@ -325,6 +323,18 @@ contract CrowdFund is KeeperCompatibleInterface {
         return remainingTime;
     }
 
+    // for contract owner only to set the campaign status
+    function setCampaignStatus(
+        uint256 _id,
+        CampaignStatus _status
+    ) external onlyOwner {
+        Campaign storage campaign = s_campaigns[_id];
+
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+
+        campaign.status = _status;
+    }
+
     function checkUpkeep(
         bytes calldata
     )
@@ -338,7 +348,7 @@ contract CrowdFund is KeeperCompatibleInterface {
     }
 
     function performUpkeep(bytes memory performData) external override {
-        updateCampaignStatus();
+        _updateCampaignStatus();
     }
 
     function isUpdateCampaignStatusNeeded() internal view returns (bool) {
@@ -349,7 +359,7 @@ contract CrowdFund is KeeperCompatibleInterface {
         return false;
     }
 
-    function updateCampaignStatus() internal onlyOwner {
+    function _updateCampaignStatus() internal onlyOwner {
         for (uint i = 0; i < s_numberOfCampaigns; i++) {
             Campaign storage campaign = s_campaigns[i];
             if (campaign.status == CampaignStatus.OPEN) {
@@ -357,18 +367,6 @@ contract CrowdFund is KeeperCompatibleInterface {
                 emit UpdatedCampaign(i, campaign.target, campaign.deadline);
             }
         }
-    }
-
-    // for contract owner only to set the campaign status
-    function setCampaignStatus(
-        uint256 _id,
-        CampaignStatus _status
-    ) internal onlyOwner {
-        Campaign storage campaign = s_campaigns[_id];
-
-        if (!s_campaignExist[_id]) revert CrowdFund__Required();
-
-        campaign.status = _status;
     }
 
     function _refund(uint _id) internal {
