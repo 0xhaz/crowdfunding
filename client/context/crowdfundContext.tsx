@@ -128,7 +128,7 @@ export const CrowdFundDataProvider = ({
       try {
         const allCampaigns = await getCampaigns();
         const filteredCampaign = allCampaigns?.filter((campaign: Campaign) => {
-          campaign?.owner === account;
+          return campaign?.owner === account;
         });
 
         return filteredCampaign;

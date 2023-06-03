@@ -6,44 +6,29 @@ import Image from "next/image";
 
 import { CustomButton } from "./";
 import { logo, menu, search } from "../public/assets";
-import { useCrowdFundData } from "../context";
 import { navlinks } from "../constants";
 import { useAccount } from "../context";
 
-type Campaign = {
-  title: string;
-  query: string;
+type NavbarProps = {
+  onSearchQueryChange: (query: string) => void;
 };
 
-const Navbar = () => {
+const Navbar = ({ onSearchQueryChange }: NavbarProps) => {
   const [isActive, setIsActive] = useState("dashboard");
   const [toggleDrawer, setToggleDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredCampaigns, setFilteredCampaigns] = useState<Campaign[]>([]);
   const { connect, account } = useAccount();
-  const { getCampaigns } = useCrowdFundData();
   const router = useRouter();
 
-  const filterCampaigns = async (campaigns: Campaign[], query: string) => {
-    const allCampaigns = await getCampaigns();
-    const filteredCampaigns = allCampaigns.filter((campaign: Campaign) =>
-      campaign.title.toLowerCase().includes(query.toLowerCase())
-    );
-    return filteredCampaigns;
+  const handleSearch = () => {
+    if (!account) return;
+    onSearchQueryChange(searchQuery);
   };
 
   useEffect(() => {
     if (!account) return;
-    const fetchCampaigns = async () => {
-      const allCampaigns = await getCampaigns();
-      const filteredCampaigns = await filterCampaigns(
-        allCampaigns,
-        searchQuery
-      );
-      setFilteredCampaigns(filteredCampaigns);
-    };
-    fetchCampaigns();
-  }, [searchQuery, getCampaigns]);
+    onSearchQueryChange(searchQuery);
+  }, [searchQuery]);
 
   return (
     <div className="flex md:flex-row flex-col-reverse justify-between mb-[35px] gap-6">
@@ -56,7 +41,10 @@ const Navbar = () => {
           onChange={e => setSearchQuery(e.target.value)}
         />
 
-        <div className="w-[72px] h-full rounded-[20px] bg-[#1f2937] flex justify-center items-center cursor-pointer">
+        <div
+          className="w-[72px] h-full rounded-[20px] bg-[#1f2937] flex justify-center items-center cursor-pointer"
+          onClick={handleSearch}
+        >
           <Image
             src={search}
             alt="search"
