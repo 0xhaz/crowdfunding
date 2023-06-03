@@ -553,6 +553,8 @@ describe("CrowdFund", () => {
           );
         result = await campaign.wait();
 
+        await cf.connect(deployer).setAuthorizedExecutor(deployer.address);
+
         await ethers.provider.send("evm_increaseTime", [sevenDays]);
         await ethers.provider.send("evm_mine", []);
 
@@ -660,6 +662,8 @@ describe("CrowdFund", () => {
             "Image1.jpeg"
           );
         result = await campaign.wait();
+
+        await cf.connect(deployer).setAuthorizedExecutor(deployer.address);
 
         campaign = await cf
           .connect(user2)

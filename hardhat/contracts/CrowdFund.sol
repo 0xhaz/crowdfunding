@@ -13,6 +13,7 @@ error CrowdFund__Required();
 
 contract CrowdFund is KeeperCompatibleInterface {
     address private immutable i_feeAccount;
+    address public authorizedExecutor;
     uint256 private i_feePercent;
     address private i_owner;
     CampaignStatus private campaignStatus;
@@ -55,6 +56,12 @@ contract CrowdFund is KeeperCompatibleInterface {
 
     modifier onlyOwner() {
         if (msg.sender != i_owner) revert CrowdFund__NotOwner();
+        _;
+    }
+
+    modifier onlyAuthorizedExecutor() {
+        if (msg.sender != authorizedExecutor || msg.sender != i_owner)
+            revert CrowdFund__NotOwner();
         _;
     }
 
@@ -252,6 +259,10 @@ contract CrowdFund is KeeperCompatibleInterface {
         i_feePercent = _fee;
     }
 
+    function setAuthorizedExecutor(address _executor) external onlyOwner {
+        authorizedExecutor = _executor;
+    }
+
     function withdrawFromContract() external onlyOwner {
         payable(i_owner).transfer(address(this).balance);
     }
@@ -359,7 +370,7 @@ contract CrowdFund is KeeperCompatibleInterface {
         return false;
     }
 
-    function _updateCampaignStatus() internal onlyOwner {
+    function _updateCampaignStatus() internal onlyAuthorizedExecutor {
         for (uint i = 0; i < s_numberOfCampaigns; i++) {
             Campaign storage campaign = s_campaigns[i];
             if (campaign.status == CampaignStatus.OPEN) {

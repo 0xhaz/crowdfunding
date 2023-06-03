@@ -1,2 +1,6 @@
 .git
 package.json
+/client/.env
+/client/node_modules
+/hardhat/.env
+/hardhat/node_modules

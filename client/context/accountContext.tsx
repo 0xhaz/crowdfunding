@@ -47,11 +47,11 @@ export const AccountProvider = ({
   };
 
   const checkIfWalletIsConnected = async () => {
-    // if (!window.ethereum) {
-    //   return alert("Please install MetaMask");
-    // }
+    if (!window.ethereum) {
+      return alert("Please install MetaMask");
+    }
 
-    // const accounts = await window.ethereum.request({ method: "eth_accounts" });
+    const accounts = await window.ethereum.request({ method: "eth_accounts" });
 
     // if (accounts.length) {
     //   setAccount(accounts[0]);
@@ -61,7 +61,9 @@ export const AccountProvider = ({
 
     // const provider = new ethers.providers.Web3Provider(window.ethereum);
     // setAccountProvider(provider);
+  };
 
+  const accountChange = async () => {
     window.ethereum.on("accountsChanged", async () => {
       const accounts = await window.ethereum.request({
         method: "eth_accounts",
@@ -98,6 +100,7 @@ export const AccountProvider = ({
   useEffect(() => {
     getWalletProvider();
     checkIfWalletIsConnected();
+    accountChange();
   }, []);
 
   return (
