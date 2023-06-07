@@ -75,7 +75,6 @@ const CampaignDetails = () => {
   const fetchCampaign = async () => {
     const campaignId = await getCampaignById(state);
     setCampaign(campaignId);
-    console.log("campaign: ", campaign);
     setCampaignStatus(statusMap[campaignId?.status as number]);
   };
 

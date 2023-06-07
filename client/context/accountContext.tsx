@@ -97,7 +97,6 @@ export const AccountProvider = ({
   useEffect(() => {
     getWalletProvider();
     checkIfWalletIsConnected();
-    // accountChange();
   }, []);
 
   return (
