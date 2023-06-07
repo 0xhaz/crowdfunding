@@ -29,8 +29,6 @@ To get started with the Crowdfunding Smart Contract, follow these steps:
 
 ## Contract Overview
 
-![Image Description](https://pasteboard.co/eQcUx35dcHPw.png)
-
 The Crowdfunding Smart Contract is structured as follows:
 
 - The contract defines a struct `Campaign` to represent a crowdfunding campaign. It stores essential information such as the campaign ID, owner, title, description, target amount, deadline, amount collected, image URL, donators, donations, status, category, and refund status.
