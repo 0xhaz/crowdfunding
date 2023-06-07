@@ -15,7 +15,7 @@ This repository contains a Solidity smart contract for a crowdfunding platform. 
 
 ## Introduction
 
-The Crowdfunding Smart Contract is a decentralized application (dApp) built on the Ethereum blockchain. It leverages the power of smart contract to facilitate crowdfunding campaigns in a transparent and secure manner.
+The Crowdfunding Smart Contract is a decentralized application (dApp) built on the Ethereum blockchain. It leverages the power of smart contract to facilitate crowdfunding campaigns in a transparent and secure manner
 
 ## Getting Started
 
