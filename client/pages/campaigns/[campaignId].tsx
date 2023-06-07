@@ -33,8 +33,9 @@ type fetchUSDPriceProps = () => Promise<number> | undefined;
 const CampaignDetails = () => {
   const router = useRouter();
   const state = router.query.campaignId;
-  const { campaignId, transactionHash } = router.query;
-  console.log(transactionHash);
+  const { transactionHash } = router.query;
+
+  // console.log(transactionHash);
 
   const { account, connect } = useAccount();
   const { contract } = useContract();
@@ -53,6 +54,7 @@ const CampaignDetails = () => {
   const [donators, setDonators] = useState<
     { donator: string; donation: number; transactionHash: string }[]
   >([]);
+  const [txHash, setTxHash] = useState("");
   const [totalCampaign, setTotalCampaign] = useState(0);
   const [amount, setAmount] = useState("");
   const [usdPrice, setUsdPrice] = useState<number | null>(null);
@@ -85,7 +87,13 @@ const CampaignDetails = () => {
   };
 
   const fetchDonators = async () => {
-    const data = await getDonations(state);
+    if (typeof state !== "string") {
+      console.error("Invalid campaign ID");
+      return;
+    }
+    const campaignId = parseInt(state);
+    const data = await getDonations(campaignId);
+
     setDonators(data);
   };
 
@@ -152,7 +160,9 @@ const CampaignDetails = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        if (!account) return;
+        if (typeof transactionHash === "string") {
+          setTxHash(transactionHash);
+        }
         fetchCampaign();
         fetchDonators();
         fetchUSDPrice();
@@ -161,6 +171,7 @@ const CampaignDetails = () => {
         console.log("error: ", err);
       }
     };
+    if (!account) return;
     fetchData();
   }, [account, contract, campaign?.owner, getUSDPrice]);
 
@@ -287,14 +298,14 @@ const CampaignDetails = () => {
                   >
                     <p className="font-epilogue font-normal text-[16px] text-[#e5e7eb] leading-[26px] break-all">
                       {i + 1}.{" "}
-                      <Link
+                      <a
                         href={`https://goerli.etherscan.io/tx/${item.transactionHash}`}
                         target="_blank"
                         rel="noreferrer noopener"
                         className="hover:underline"
                       >
                         {item.donator}
-                      </Link>
+                      </a>
                     </p>
 
                     <p className="font-epilogue font-normal text-[14px] lg:text-[16px] text-[#e5e7eb] leading-[26px] break-all">

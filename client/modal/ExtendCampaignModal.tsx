@@ -11,7 +11,7 @@ interface FormProps {
 
 type ExtendCampaignModalProps = {
   pId: number;
-  target: number | string;
+  target: number;
   deadline: string;
   closeModal: () => void;
 };
@@ -47,14 +47,19 @@ const ExtendCampaignModal = ({
     if (!account) return;
     setIsLoading(true);
     try {
-      const newTarget = ethers.utils.parseEther(form.target);
+      const decimals = 18;
+      const newTarget = ethers.utils.parseUnits(
+        form.target.toString(),
+        decimals
+      );
+
       const newDeadline = new Date(form.deadline);
 
-      if (newTarget.lt(target)) {
-        throw new Error(
-          "New target must be equal to or greater than the current target"
-        );
-      }
+      // if (newTarget <= target) {
+      //   throw new Error(
+      //     "New target must be equal to or greater than the current target"
+      //   );
+      // }
 
       if (newDeadline <= new Date(deadline)) {
         throw new Error(

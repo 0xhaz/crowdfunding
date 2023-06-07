@@ -1,8 +1,9 @@
 import React, { useEffect } from "react";
 import Image from "next/image";
-import { tagType, thirdweb, close } from "../public/assets";
+import { tagType } from "../public/assets";
 import Identicon from "react-identicons";
 import { daysLeft } from "../utils";
+import { Loader } from "./index";
 import { useState } from "react";
 import { useCrowdFundData, useAccount } from "../context/index";
 import { CampaignStatus } from "../context/crowdfundContext";
@@ -74,14 +75,14 @@ const FundCard = ({
 
   useEffect(() => {
     if (!account) return;
-    if (remainingDays === 0 && status !== 4) {
-      setCurrentStatus(2);
-    }
+    setIsLoading(true);
     campaignCreator();
+    setIsLoading(false);
   }, [account, remainingDays]);
 
   return (
     <div className="sm:w-[288px] w-full rounded-[15px] bg-[#1f2937] cursor-pointer relative">
+      {isLoading && <Loader />}
       <Image
         src={image}
         alt="fund"
@@ -113,10 +114,10 @@ const FundCard = ({
 
         <div className="flex justify-between flex-wrap mt-[15px] gap-2">
           <div className="flex flex-col">
-            <h4 className="font-epilogue font-semibold text-[14px] text-[#e5e7eb] leading-[22px]">
+            <h4 className="font-epilogue font-semibold text-[14px]  text-[#e5e7eb] leading-[22px]">
               {amountCollected}
             </h4>
-            <p className="mt-[3px] font-epilogue font-normal text-[12px] leading-[18px] text-[#808191] sm:max-w-[120px] truncate">
+            <p className="mt-[3px] font-epilogue font-normal text-[12px]  leading-[18px] text-[#808191] sm:max-w-[120px] truncate">
               Raised of {target}
             </p>
           </div>

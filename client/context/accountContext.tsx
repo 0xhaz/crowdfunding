@@ -26,10 +26,10 @@ const AccountContext = createContext<AccountContextValue>(
 export const AccountProvider = ({
   children,
 }: AccountProviderProps): JSX.Element => {
-  const [account, setAccount] = useState<Account>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const [accountProvider, setAccountProvider] =
-    useState<AccountWeb3Provider>(null);
-  const [signer, setSigner] = useState<Signer>(null);
+    useState<AccountWeb3Provider | null>(null);
+  const [signer, setSigner] = useState<Signer | null>(null);
 
   const getWeb3Modal = () => {
     const modal = new Web3Modal({
@@ -51,26 +51,23 @@ export const AccountProvider = ({
       return alert("Please install MetaMask");
     }
 
-    const accounts = await window.ethereum.request({ method: "eth_accounts" });
-
-    // if (accounts.length) {
-    //   setAccount(accounts[0]);
-    // } else {
-    //   setAccount(null);
-    // }
-
-    // const provider = new ethers.providers.Web3Provider(window.ethereum);
-    // setAccountProvider(provider);
-  };
-
-  const accountChange = async () => {
-    window.ethereum.on("accountsChanged", async () => {
+    try {
       const accounts = await window.ethereum.request({
-        method: "eth_accounts",
+        method: "eth_requestAccounts",
       });
-      const account = ethers.utils.getAddress(accounts[0]);
-      setAccount(account);
-    });
+
+      if (accounts.length > 0) {
+        const account = ethers.utils.getAddress(accounts[0]);
+        setAccount(account);
+      }
+
+      window.ethereum.on("accountsChanged", (updatedAccounts: string) => {
+        const account = ethers.utils.getAddress(updatedAccounts[0]);
+        setAccount(account);
+      });
+    } catch (error) {
+      console.error("Error retrieving accounts:", error);
+    }
   };
 
   const connect = async () => {
@@ -100,7 +97,7 @@ export const AccountProvider = ({
   useEffect(() => {
     getWalletProvider();
     checkIfWalletIsConnected();
-    accountChange();
+    // accountChange();
   }, []);
 
   return (

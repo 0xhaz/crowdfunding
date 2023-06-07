@@ -171,12 +171,17 @@ export const CrowdFundDataProvider = ({
         const signer = accountProvider?.getSigner();
         const parsedAmount = ethers.utils.parseEther(amount);
         console.log(parsedAmount.toString());
-        const data = await contract?.connect(signer).donateToCampaign(pId, {
-          value: parsedAmount.toString(),
-        });
-        console.log("Donate data: ", data);
+        const transaction = await contract
+          ?.connect(signer)
+          .donateToCampaign(pId, {
+            value: parsedAmount.toString(),
+          });
+        console.log("Donate transaction: ", transaction);
 
-        fetchTransactionDetails(data?.hash);
+        const transactionHash = transaction?.hash;
+        if (transactionHash) {
+          fetchTransactionDetails(transactionHash);
+        }
       } catch (error) {
         console.error(error);
       }

@@ -60,7 +60,7 @@ contract CrowdFund is KeeperCompatibleInterface {
     }
 
     modifier onlyAuthorizedExecutor() {
-        if (msg.sender != authorizedExecutor || msg.sender != i_owner)
+        if (msg.sender != authorizedExecutor && msg.sender != i_owner)
             revert CrowdFund__NotOwner();
         _;
     }
