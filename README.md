@@ -41,10 +41,7 @@ The Crowdfunding Smart Contract is structured as follows:
 - It utilizes the Chainlink library for price feed functionality, allowing campaigns to accept donations in different currencies.
 
 ## Functions
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/main
 constructor
 
 - Initializes the contract by setting the fee account, fee percent, owner, and price feed address.
@@ -59,7 +56,6 @@ donateToCampaign
 
 cancelCampaign
 
-<<<<<<< HEAD
 - Allows the campaign owner to cancel a campaign. It can only be called for campaigns with the status OPEN. The campaign's status is set to DELETED, and if there are any collected funds, a refund is triggered using the \_refund function. The function emits the CancelCampaign event.
 
 withdrawCampaign
@@ -69,17 +65,6 @@ withdrawCampaign
 refundCampaign
 
 - Allows the campaign owner to refund the funds collected in a campaign. It can only be called before the campaign's deadline. The campaign's status is set to REVERTED, and a refund is triggered using the \_refund function. The function emits the RefundCampaign event.
-=======
-- Allows the campaign owner to cancel a campaign. It can only be called for campaigns with the status OPEN. The campaign's status is set to DELETED, and if there are any collected funds, a refund is triggered using the _refund function. The function emits the CancelCampaign event.
-
-withdrawCampaign
-
-- Allows the campaign owner to withdraw the funds from a campaign. It can only be called for campaigns with the status APPROVED or REVERTED. The campaign's status is set to PAID, and the funds are transferred to the campaign owner using the _payOut function. The function emits the WithdrawCampaign event.
-
-refundCampaign
-
-- Allows the campaign owner to refund the funds collected in a campaign. It can only be called before the campaign's deadline. The campaign's status is set to REVERTED, and a refund is triggered using the _refund function. The function emits the RefundCampaign event.
->>>>>>> origin/main
 
 updateCampaign
 
@@ -149,11 +134,7 @@ checkUpkeep and performUpkeep
 
 - Functions required by the Keeper Network to perform maintenance tasks and update campaign statuses.
 
-<<<<<<< HEAD
 Internal functions (\_refund, \_payTo, \_payOut, \_isUpdateCampaignStatusNeeded, \_updateCampaignStatus)
-=======
-Internal functions (_refund, _payTo, _payOut, _isUpdateCampaignStatusNeeded, _updateCampaignStatus)
->>>>>>> origin/main
 
 - These functions are used internally for refunding, transferring funds, updating campaign status, and checking if a campaign status update is needed.
 
