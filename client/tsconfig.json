@@ -21,7 +21,7 @@
     "**/*.tsx",
     "context/index.js",
     "components/index.js",
-    "pages/contracts/AggregatorV3Interface.js"
+    "pages/AggregatorV3Interface.js"
   ],
   "exclude": ["node_modules"]
 }
