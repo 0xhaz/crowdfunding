@@ -14,11 +14,7 @@
 
 # production
 /build
-package.json
-package-lock.json
-yarn.lock
-tsconfig.json
-tailwind.config.js
+
 
 
 # misc
