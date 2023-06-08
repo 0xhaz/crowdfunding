@@ -2,7 +2,7 @@ import { ethers, providers } from "ethers";
 import React, { createContext, useCallback, useContext } from "react";
 import contractAddress from "../pages/contracts/AggregatorV3Interface.json";
 // import ContractArtifact from "../pages/contracts/MockV3Aggregator.json";
-import AggregratorV3InterfaceABI from "../pages/AggregatorV3Interface";
+import AggregratorV3InterfaceABI from "../utils/AggregatorV3Interface";
 
 type Contract = ethers.Contract | null;
 
