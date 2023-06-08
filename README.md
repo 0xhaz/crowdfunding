@@ -1,5 +1,7 @@
 # Decentralized Kickstarter Smart Contract
 
+![Image Description](/client/public/assets/homepage-dapps.png)
+
 This repository contains a Solidity smart contract for a crowdfunding platform. The contract allows users to create and manage crowdfunding campaigns, accept donations, and distribute funds.
 
 ## Table of Contents
