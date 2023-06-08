@@ -296,15 +296,7 @@ const CampaignDetails = () => {
                     className="flex justify-left  items-center gap-20"
                   >
                     <p className="font-epilogue font-normal text-[16px] text-[#e5e7eb] leading-[26px] break-all">
-                      {i + 1}.{" "}
-                      <a
-                        href={`https://goerli.etherscan.io/tx/${item.transactionHash}`}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="hover:underline"
-                      >
-                        {item.donator}
-                      </a>
+                      {i + 1}. {item.donator}
                     </p>
 
                     <p className="font-epilogue font-normal text-[14px] lg:text-[16px] text-[#e5e7eb] leading-[26px] break-all">
