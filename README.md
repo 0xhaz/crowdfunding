@@ -33,6 +33,7 @@ To get started with the Crowdfunding Smart Contract, follow these steps:
 ## Contract Overview
 
 ![Image Description](/client/public/assets/process-flow-chart.png)
+[View Diagram Source](https://app.weje.io/b/-NW1KWyH00dx9_AvgI-p)
 
 The Crowdfunding Smart Contract is structured as follows:
 
