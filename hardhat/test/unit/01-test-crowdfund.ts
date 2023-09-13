@@ -279,9 +279,6 @@ describe("CrowdFund", () => {
         result = await campaign.wait();
 
         expect(await cf.provider.getBalance(cf.address)).to.equal(0);
-        // expect(await ethers.provider.getBalance(user2.address)).to.equal(
-        //   halfAmount
-        // );
       });
 
       it("should change the status to DELETED", async () => {
@@ -643,7 +640,6 @@ describe("CrowdFund", () => {
   describe("Update Campaign Status with Chainlink Keepers", () => {
     let deadline: any;
     let campaign, result: any;
-    const fullAmount = token(1);
     const halfAmount = token(0.5);
     const newDeadline = Math.floor(Date.now() / 1000) + 86400 * 2; // Set the deadline to 48 hours from now
     const newTarget = token(2);

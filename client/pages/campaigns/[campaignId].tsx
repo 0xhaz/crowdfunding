@@ -35,8 +35,6 @@ const CampaignDetails = () => {
   const state = router.query.campaignId;
   const { transactionHash } = router.query;
 
-  // console.log(transactionHash);
-
   const { account, connect } = useAccount();
   const { contract } = useContract();
   const { getUSDPrice } = usePriceContract();
@@ -110,7 +108,7 @@ const CampaignDetails = () => {
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const ethAmount = parseFloat(e.target.value);
     const usdAmount = ethAmount * (usdPrice || 0);
-    // console.log(`Approx. price in USD: ${usdAmount?.toFixed(2)}`);
+
     setAmount(e.target.value);
     setUsdPrice(usdAmount || 0);
   };
@@ -120,7 +118,7 @@ const CampaignDetails = () => {
     setIsLoading(true);
     const ethAmount = parseFloat(amount);
     const usdAmount = ethAmount * (usdPrice || 0);
-    // console.log(`Approx. price in USD: ${usdAmount?.toFixed(2)}`);
+
     await donate(state, amount);
     router.push("/");
     setIsLoading(false);

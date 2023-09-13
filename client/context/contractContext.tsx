@@ -29,7 +29,7 @@ export const ContractProvider = ({ children }: ContractProviderProps) => {
 
   const loadNetwork = async (provider: any) => {
     const { chainId } = await provider.getNetwork();
-    console.log(chainId);
+
     return chainId;
   };
 

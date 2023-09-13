@@ -30,13 +30,9 @@ export default async function handler(req, res) {
     const totalCampaigns = await contract.getCampaigns();
     const numberOfCampaigns = totalCampaigns.length;
 
-    console.log("totalCampaigns: ", totalCampaigns);
-    console.log("numberOfCampaigns: ", numberOfCampaigns);
-
     for (let id = 0; id < numberOfCampaigns; id++) {
       const tx = await contract.connect(signer).updateCampaignStatus(id);
       await tx.wait();
-      console.log("tx: ", tx);
 
       console.log(`Status change for campaign ID:${id}`);
     }

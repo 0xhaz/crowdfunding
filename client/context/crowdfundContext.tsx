@@ -176,7 +176,6 @@ export const CrowdFundDataProvider = ({
           .donateToCampaign(pId, {
             value: parsedAmount.toString(),
           });
-        console.log("Donate transaction: ", transaction);
 
         const transactionHash = transaction?.hash;
         if (transactionHash) {
