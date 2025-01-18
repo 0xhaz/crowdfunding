@@ -5,8 +5,12 @@ import {PriceConverter, AggregatorV3Interface} from "../library/PriceConverter.s
 import {KeeperCompatibleInterface} from
     "@chainlink/contracts/src/v0.8/automation/interfaces/KeeperCompatibleInterface.sol";
 import {ProofVerifier} from "src/circuitZK/ProofVerifier.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract CrowdFund is KeeperCompatibleInterface {
+contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
+    using Math for uint256;
+
     // Verifier contract instance (for GKR proof verification)
     ProofVerifier private s_proofVerifier;
 
@@ -55,7 +59,8 @@ contract CrowdFund is KeeperCompatibleInterface {
         uint256 amountCollected;
         string image;
         address[] donators;
-        uint256[] donations;
+        mapping(address => uint256) donations;
+        uint256 donationCount;
         CampaignStatus status;
         Category category;
         bool refunded;
@@ -134,8 +139,6 @@ contract CrowdFund is KeeperCompatibleInterface {
         campaign.deadline = _deadline;
         campaign.amountCollected = 0;
         campaign.image = _image;
-        campaign.donators = new address[](0);
-        campaign.donations = new uint256[](0);
         campaign.category = _category;
         campaign.isCompleted = false;
 
@@ -154,32 +157,32 @@ contract CrowdFund is KeeperCompatibleInterface {
      * @notice Contribute to a campaign with proof validation
      * @param _id The ID of the campaign
      * @param _proof The ZK proof of a valid contribution
-     * @param _publicInputs Public inputs for the ZK proof (e.g, amount, campaign ID))
+     * @param _publicInputsHash Public inputs for the ZK proof (e.g, amount, campaign ID))
      */
-    function donateToCampaign(uint256 _id, bytes calldata _proof, uint256[] calldata _publicInputs)
+    function donateToCampaign(uint256 _id, bytes calldata _proof, bytes32 _publicInputsHash)
         external
         payable
         onlyOpenCampaign(_id)
     {
         // Verify campaign exists and is open
-        if (s_campaigns[_id].deadline > block.timestamp) revert CrowdFund__Expired();
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+        if (s_campaigns[_id].deadline < block.timestamp) revert CrowdFund__Expired();
 
         // Verify ZK proof off-chain and revert if invalid
-        bool isValid = s_proofVerifier.verifyProof(_proof, _publicInputs);
+        bool isValid = s_proofVerifier.verifyProof(_proof, _publicInputsHash);
         if (!isValid) revert CrowdFund__Claimed();
 
         // Extract contribution amount from public inputs
-        uint256 contributionAmount = _publicInputs[0];
+        uint256 contributionAmount = abi.decode(abi.encodePacked(_publicInputsHash), (uint256));
         if (msg.value != contributionAmount) revert CrowdFund__Mismatch();
 
         Campaign storage campaign = s_campaigns[_id];
         uint256 amount = msg.value;
 
-        if (!s_campaignExist[_id]) revert CrowdFund__Required();
-
+        campaign.donations[msg.sender] += amount;
         campaign.donators.push(msg.sender);
-        campaign.donations.push(amount);
         campaign.amountCollected += amount;
+        campaign.donationCount++;
 
         emit DonatedCampaign(_id, msg.sender, amount, block.timestamp);
 
@@ -191,17 +194,20 @@ contract CrowdFund is KeeperCompatibleInterface {
         }
     }
 
-    function batchContribute(uint256 _id, bytes calldata aggregateProof, uint256[] calldata publicInputs) external {
-        if (s_campaignExist[_id]) revert CrowdFund__Required();
-        if (s_campaigns[_id].status == CampaignStatus.OPEN) revert CrowdFund__NotOpen();
-        if (s_campaigns[_id].deadline > block.timestamp) revert CrowdFund__Expired();
+    function batchContribute(uint256 _id, bytes calldata _aggregateProof, bytes32 _publicInputsHash) external {
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+        if (s_campaigns[_id].status != CampaignStatus.OPEN) revert CrowdFund__NotOpen();
+        if (s_campaigns[_id].deadline < block.timestamp) revert CrowdFund__Expired();
 
         // Verify aggregated proof
-        bool isValid = s_proofVerifier.verifyProof(aggregateProof, publicInputs);
+        bool isValid = s_proofVerifier.verifyProof(_aggregateProof, _publicInputsHash);
         if (!isValid) revert CrowdFund__Claimed();
 
         // Extract total contribution amount from public inputs
-        uint256 totalContributions = publicInputs[0];
+        uint256 totalContributions = abi.decode(abi.encodePacked(_publicInputsHash), (uint256));
+        // assembly {
+        //     totalContributions := mload(add(_publicInputsHash, 32))
+        // }
 
         // Update campaign state
         Campaign storage campaign = s_campaigns[_id];
@@ -289,22 +295,72 @@ contract CrowdFund is KeeperCompatibleInterface {
     }
 
     function getDonators(uint256 _id) external view returns (address[] memory, uint256[] memory) {
-        return (s_campaigns[_id].donators, s_campaigns[_id].donations);
+        Campaign storage campaign = s_campaigns[_id];
+        uint256 donatorsCount = campaign.donators.length;
+        address[] storage donators = campaign.donators;
+        uint256[] memory donations = new uint256[](donatorsCount);
+
+        for (uint256 i = 0; i < donatorsCount; i++) {
+            donations[i] = campaign.donations[donators[i]];
+        }
+
+        return (donators, donations);
     }
 
-    function getCampaigns() external view returns (Campaign[] memory) {
-        Campaign[] memory allCampaigns = new Campaign[](s_numberOfCampaigns);
+    struct CampaignView {
+        uint256 id;
+        address owner;
+        string title;
+        string description;
+        uint256 target;
+        uint256 deadline;
+        uint256 amountCollected;
+        string image;
+        CampaignStatus status;
+        Category category;
+        bool refunded;
+        bool isCompleted;
+    }
+
+    function getCampaigns() external view returns (CampaignView[] memory) {
+        CampaignView[] memory allCampaigns = new CampaignView[](s_numberOfCampaigns);
 
         for (uint256 i = 0; i < s_numberOfCampaigns; i++) {
             Campaign storage item = s_campaigns[i];
-
-            allCampaigns[i] = item;
+            allCampaigns[i] = CampaignView(
+                item.id,
+                item.owner,
+                item.title,
+                item.description,
+                item.target,
+                item.deadline,
+                item.amountCollected,
+                item.image,
+                item.status,
+                item.category,
+                item.refunded,
+                item.isCompleted
+            );
         }
         return allCampaigns;
     }
 
-    function getCampaign(uint256 _id) external view returns (Campaign memory) {
-        return s_campaigns[_id];
+    function getCampaign(uint256 _id) external view returns (CampaignView memory) {
+        Campaign storage item = s_campaigns[_id];
+        return CampaignView(
+            item.id,
+            item.owner,
+            item.title,
+            item.description,
+            item.target,
+            item.deadline,
+            item.amountCollected,
+            item.image,
+            item.status,
+            item.category,
+            item.refunded,
+            item.isCompleted
+        );
     }
 
     function getFeeAccount() external view returns (address) {
@@ -332,7 +388,7 @@ contract CrowdFund is KeeperCompatibleInterface {
     }
 
     function getRefundStatus(uint256 _id) external view returns (bool) {
-        Campaign memory campaign = s_campaigns[_id];
+        Campaign storage campaign = s_campaigns[_id];
 
         return campaign.refunded;
     }
@@ -393,10 +449,8 @@ contract CrowdFund is KeeperCompatibleInterface {
         if (campaign.status != CampaignStatus.DELETED && campaign.status != CampaignStatus.REVERTED) {
             revert CrowdFund__Required();
         }
-
-        // Calculate total amount to refund
-        for (uint256 i = 0; i < campaign.donations.length; i++) {
-            _payTo(campaign.donators[i], campaign.donations[i]);
+        for (uint256 i = 0; i < campaign.donators.length; i++) {
+            _payTo(campaign.donators[i], campaign.donations[campaign.donators[i]]);
         }
 
         campaign.refunded = true;
@@ -409,13 +463,10 @@ contract CrowdFund is KeeperCompatibleInterface {
 
     function _payOut(uint256 _id) internal {
         Campaign storage campaign = s_campaigns[_id];
-
-        if (campaign.status != CampaignStatus.PAID) {
-            revert CrowdFund__Required();
-        }
-
         uint256 totalAmount = campaign.amountCollected;
-        uint256 fee = (totalAmount * i_feePercent) / 100;
+        campaign.amountCollected = 0;
+
+        uint256 fee = totalAmount.mulDiv(i_feePercent, 100);
         uint256 netAmount = totalAmount - fee;
 
         _payTo(campaign.owner, netAmount);

@@ -4,3 +4,6 @@
 [submodule "foundry/lib/chainlink-brownie-contracts"]
 	path = foundry/lib/chainlink-brownie-contracts
 	url = https://github.com/smartcontractkit/chainlink-brownie-contracts
+[submodule "foundry/lib/openzeppelin-contracts"]
+	path = foundry/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
