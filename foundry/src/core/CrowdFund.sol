@@ -7,9 +7,14 @@ import {KeeperCompatibleInterface} from
 import {ProofVerifier} from "src/circuitZK/ProofVerifier.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IZKBridge, IZKBridgeReceiver} from "src/interfaces/IZKBridge.sol";
+import {zkLoginVerifier} from "src/core/zkLoginVerifier.sol";
 
-contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
+contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard, IZKBridgeReceiver {
     using Math for uint256;
+
+    IZKBridge public zkBridge;
+    zkLoginVerifier public zkVerifier;
 
     // Verifier contract instance (for GKR proof verification)
     ProofVerifier private s_proofVerifier;
@@ -22,6 +27,8 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
     error CrowdFund__Expired();
     error CrowdFund__Mismatch();
     error CrowdFund__NotOpen();
+    error CrowdFund__InsufficientFunds();
+    error CrowdFund__InvalidZkProof();
 
     address private immutable i_feeAccount;
     address public authorizedExecutor;
@@ -93,29 +100,40 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         _;
     }
 
+    modifier onlyZkVerifier(bytes32 _zkProof, bytes32 _publicKey) {
+        if (!zkVerifier.verifyZkLogin(_zkProof, _publicKey)) revert CrowdFund__InvalidZkProof();
+        _;
+    }
+
     event CreatedCampaign(uint256 id, address indexed creator, Category category, uint256 target, uint256 deadline);
-
     event CancelCampaign(uint256 id, address indexed creator, uint256 timestamp);
-
     event DonatedCampaign(uint256 id, address indexed donator, uint256 value, uint256 timestamp);
-
     event PaidOutCampaign(uint256 id, address indexed creator, uint256 donations, uint256 timestamp);
-
     event WithdrawCampaign(uint256 id, address indexed creator);
-
     event RefundCampaign(uint256 id, address indexed creator);
-
     event UpdatedCampaign(uint256 id, uint256 newTarget, uint256 newDeadline);
+    event CrossChainDonation(uint256 id, address indexed donator, uint256 value, uint16 dstChainId);
+    event CrossChainDonationReceived(uint256 id, address indexed donator, uint256 value, uint16 srcChainId);
+    event DonatedWithZkLogin(uint256 id, address indexed donator, uint256 value, uint256 timestamp);
 
     mapping(uint256 => Campaign) private s_campaigns;
     mapping(uint256 => bool) public s_campaignExist;
 
-    constructor(address _feeAccount, uint256 _feePercent, address priceFeeAddress, address _proofVerifier) {
+    constructor(
+        address _feeAccount,
+        uint256 _feePercent,
+        address priceFeeAddress,
+        address _proofVerifier,
+        address _zkBridgeAddress,
+        address _zkVerifier
+    ) {
         i_feeAccount = _feeAccount;
         i_feePercent = _feePercent;
         i_owner = msg.sender;
         s_priceFeed = AggregatorV3Interface(priceFeeAddress);
         s_proofVerifier = ProofVerifier(_proofVerifier);
+        zkBridge = IZKBridge(_zkBridgeAddress);
+        zkVerifier = zkLoginVerifier(_zkVerifier);
     }
 
     function createCampaign(
@@ -124,8 +142,10 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         string memory _description,
         uint256 _target,
         uint256 _deadline,
-        string memory _image
-    ) external returns (uint256) {
+        string memory _image,
+        bytes32 _zkProof,
+        bytes32 _publicKey
+    ) external onlyZkVerifier(_zkProof, _publicKey) returns (uint256) {
         if (_target < 0 ether) revert CrowdFund__Required();
         if (_deadline <= block.timestamp) revert CrowdFund__Required();
 
@@ -159,21 +179,24 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
      * @param _proof The ZK proof of a valid contribution
      * @param _publicInputsHash Public inputs for the ZK proof (e.g, amount, campaign ID))
      */
-    function donateToCampaign(uint256 _id, bytes calldata _proof, bytes32 _publicInputsHash)
-        external
-        payable
-        onlyOpenCampaign(_id)
-    {
+    function donateToCampaign(
+        uint256 _id,
+        bytes calldata _proof,
+        bytes32 _publicInputsHash,
+        bytes32 _zkProof,
+        bytes32 _publicKey
+    ) external payable onlyZkVerifier(_zkProof, _publicKey) onlyOpenCampaign(_id) {
         // Verify campaign exists and is open
         if (!s_campaignExist[_id]) revert CrowdFund__Required();
         if (s_campaigns[_id].deadline < block.timestamp) revert CrowdFund__Expired();
 
         // Verify ZK proof off-chain and revert if invalid
-        bool isValid = s_proofVerifier.verifyProof(_proof, _publicInputsHash);
+        bool isValid = s_proofVerifier.verifyCompressedProof(_proof, _publicInputsHash);
         if (!isValid) revert CrowdFund__Claimed();
 
         // Extract contribution amount from public inputs
-        uint256 contributionAmount = abi.decode(abi.encodePacked(_publicInputsHash), (uint256));
+        uint256 contributionAmount = uint256(_publicInputsHash);
+
         if (msg.value != contributionAmount) revert CrowdFund__Mismatch();
 
         Campaign storage campaign = s_campaigns[_id];
@@ -194,17 +217,44 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         }
     }
 
-    function batchContribute(uint256 _id, bytes calldata _aggregateProof, bytes32 _publicInputsHash) external {
+    function donateCrossChain(
+        uint256 _id,
+        uint256 _amount,
+        uint16 _dstChainId,
+        address _dstCrowdFund,
+        bytes32 _zkProof,
+        bytes32 _publicKey
+    ) external payable onlyZkVerifier(_zkProof, _publicKey) {
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+        if (msg.value < _amount) revert CrowdFund__InsufficientFunds();
+
+        bytes memory payload = abi.encode(_id, _amount, msg.sender, _dstChainId);
+
+        uint256 fee = zkBridge.estimateFee(_dstChainId);
+        if (msg.value < _amount + fee) revert CrowdFund__InsufficientFunds();
+
+        zkBridge.send(_dstChainId, _dstCrowdFund, payload);
+
+        emit CrossChainDonation(_id, msg.sender, _amount, _dstChainId);
+    }
+
+    function batchContribute(
+        uint256 _id,
+        bytes calldata _aggregateProof,
+        bytes32 _publicInputsHash,
+        bytes32 _zkProof,
+        bytes32 _publicKey
+    ) external onlyZkVerifier(_zkProof, _publicKey) {
         if (!s_campaignExist[_id]) revert CrowdFund__Required();
         if (s_campaigns[_id].status != CampaignStatus.OPEN) revert CrowdFund__NotOpen();
         if (s_campaigns[_id].deadline < block.timestamp) revert CrowdFund__Expired();
 
         // Verify aggregated proof
-        bool isValid = s_proofVerifier.verifyProof(_aggregateProof, _publicInputsHash);
+        bool isValid = s_proofVerifier.verifyCompressedProof(_aggregateProof, _publicInputsHash);
         if (!isValid) revert CrowdFund__Claimed();
 
         // Extract total contribution amount from public inputs
-        uint256 totalContributions = abi.decode(abi.encodePacked(_publicInputsHash), (uint256));
+        uint256 totalContributions = uint256(_publicInputsHash);
         // assembly {
         //     totalContributions := mload(add(_publicInputsHash, 32))
         // }
@@ -221,7 +271,12 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         emit DonatedCampaign(_id, msg.sender, totalContributions, block.timestamp);
     }
 
-    function cancelCampaign(uint256 _id) external onlyCampaignOwner(_id) onlyOpenCampaign(_id) {
+    function cancelCampaign(uint256 _id, bytes32 _zkProof, bytes32 _publicKey)
+        external
+        onlyZkVerifier(_zkProof, _publicKey)
+        onlyCampaignOwner(_id)
+        onlyOpenCampaign(_id)
+    {
         Campaign storage campaign = s_campaigns[_id];
 
         if (campaign.owner != msg.sender) revert CrowdFund__NotOwner();
@@ -235,7 +290,12 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         emit CancelCampaign(_id, msg.sender, block.timestamp);
     }
 
-    function withdrawCampaign(uint256 _id) external payable onlyCampaignOwner(_id) {
+    function withdrawCampaign(uint256 _id, bytes32 _zkProof, bytes32 _publicKey)
+        external
+        payable
+        onlyZkVerifier(_zkProof, _publicKey)
+        onlyCampaignOwner(_id)
+    {
         Campaign storage campaign = s_campaigns[_id];
 
         if (campaign.status != CampaignStatus.APPROVED && campaign.status != CampaignStatus.REVERTED) {
@@ -251,7 +311,11 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         emit WithdrawCampaign(_id, msg.sender);
     }
 
-    function refundCampaign(uint256 _id) external onlyCampaignOwner(_id) {
+    function refundCampaign(uint256 _id, bytes32 _zkProof, bytes32 _publicKey)
+        external
+        onlyZkVerifier(_zkProof, _publicKey)
+        onlyCampaignOwner(_id)
+    {
         Campaign storage campaign = s_campaigns[_id];
 
         if (
@@ -268,7 +332,11 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         emit RefundCampaign(_id, campaign.owner);
     }
 
-    function updateCampaign(uint256 _id, uint256 _newTarget, uint256 _newDeadline) external onlyCampaignOwner(_id) {
+    function updateCampaign(uint256 _id, uint256 _newTarget, uint256 _newDeadline, bytes32 _zkProof, bytes32 _publicKey)
+        external
+        onlyZkVerifier(_zkProof, _publicKey)
+        onlyCampaignOwner(_id)
+    {
         Campaign storage campaign = s_campaigns[_id];
 
         if (campaign.status != CampaignStatus.REVERTED) {
@@ -407,6 +475,11 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         return remainingTime;
     }
 
+    function getCampaignStatus(uint256 _id) external view returns (CampaignStatus) {
+        Campaign storage campaign = s_campaigns[_id];
+        return campaign.status;
+    }
+
     // for contract owner only to set the campaign status
     function setCampaignStatus(uint256 _id, CampaignStatus _status) external onlyOwner {
         Campaign storage campaign = s_campaigns[_id];
@@ -473,5 +546,21 @@ contract CrowdFund is KeeperCompatibleInterface, ReentrancyGuard {
         _payTo(i_feeAccount, fee);
 
         emit PaidOutCampaign(_id, msg.sender, netAmount, block.timestamp);
+    }
+
+    function zkReceive(uint16 srcChainId, address srcAddress, uint64 nonce, bytes calldata payload) external override {
+        if (msg.sender != address(zkBridge)) revert CrowdFund__NotOwner();
+
+        (uint256 _id, uint256 _amount, address _donator, uint16 _sourceChain) =
+            abi.decode(payload, (uint256, uint256, address, uint16));
+
+        if (!s_campaignExist[_id]) revert CrowdFund__Required();
+
+        Campaign storage campaign = s_campaigns[_id];
+        campaign.amountCollected += _amount;
+        campaign.donations[_donator] += _amount;
+        campaign.donators.push(_donator);
+
+        emit CrossChainDonationReceived(_id, _donator, _amount, _sourceChain);
     }
 }
